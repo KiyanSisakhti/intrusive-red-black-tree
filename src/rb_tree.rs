@@ -334,6 +334,10 @@ where
             self.delete_fix(z_right);
         }
 
+        T::set_parent(z, NonNull::dangling());
+        T::set_child(z, 0, NonNull::dangling());
+        T::set_child(z, 1, NonNull::dangling());
+
         Some(z)
     }
 
