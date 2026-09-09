@@ -643,3 +643,92 @@ fn print_node<T: RBNode<Node = T, Key: Debug>>(
         print_node(tree, left, &new_prefix, true);
     }
 }
+
+#[test]
+fn test_delete_node_direct_and_edge_cases() {
+    let sentinel = MyNode::create_sentinel();
+    let mut tree = RBTree::new(sentinel);
+
+    // 1. Edge Case: Deleting sentinel/nil node directly should return false
+    assert!(!tree.delete_node(sentinel));
+
+    // Insert nodes and store raw pointers directly
+    let n10 = MyNode::new(10, sentinel);
+    let n5 = MyNode::new(5, sentinel);
+    let n15 = MyNode::new(15, sentinel);
+    let n3 = MyNode::new(3, sentinel);
+
+    tree.insert(n10);
+    tree.insert(n5);
+    tree.insert(n15);
+    tree.insert(n3);
+
+    assert_eq!(check_tree_invariants(&tree), 4);
+    assert_eq!(tree.min_node(), n3);
+
+    // 2. Delete minimum node directly via pointer
+    assert!(tree.delete_node(n3));
+    unsafe { MyNode::free(n3) };
+    assert_eq!(check_tree_invariants(&tree), 3);
+    assert_eq!(tree.min_node(), n5);
+
+    // 3. Delete root/internal node directly via pointer
+    assert!(tree.delete_node(n10));
+    unsafe { MyNode::free(n10) };
+    assert_eq!(check_tree_invariants(&tree), 2);
+
+    // Cleanup remaining nodes
+    assert!(tree.delete_node(n5));
+    unsafe { MyNode::free(n5) };
+    assert!(tree.delete_node(n15));
+    unsafe { MyNode::free(n15) };
+
+    assert_eq!(tree.root_node(), tree.nil_node());
+    assert_eq!(tree.min_node(), tree.nil_node());
+
+    unsafe { MyNode::free(sentinel) };
+}
+
+#[test]
+fn fuzz_delete_node_random_pointers() {
+    check!().with_type::<Vec<i32>>().for_each(|keys| {
+        let sentinel = MyNode::create_sentinel();
+        let mut tree = RBTree::new(sentinel);
+        let mut node_ptrs = Vec::new();
+
+        // Populate tree and retain direct node pointers
+        for &key in keys {
+            if !tree.exist(&key) {
+                let ptr = MyNode::new(key, sentinel);
+                tree.insert(ptr);
+                node_ptrs.push(ptr);
+            }
+        }
+
+        check_tree_invariants(&tree);
+
+        // Delete nodes directly using raw pointers in LIFO order
+        while let Some(ptr) = node_ptrs.pop() {
+            let key = *MyNode::get_key(ptr);
+            assert!(
+                tree.delete_node(ptr),
+                "Failed to delete node directly with key {}",
+                key
+            );
+
+            unsafe {
+                MyNode::free(ptr);
+            }
+
+            let count = check_tree_invariants(&tree);
+            assert_eq!(count, node_ptrs.len());
+        }
+
+        assert_eq!(tree.root_node(), tree.nil_node());
+        assert_eq!(tree.min_node(), tree.nil_node());
+
+        unsafe {
+            MyNode::free(sentinel);
+        }
+    });
+}

@@ -220,32 +220,11 @@ where
         T::set_parent(v, u_parent);
     }
 
-    /// Removes a node with the specified key from the tree.
-    ///
-    /// Returns `Some(NonNull<T>)` containing the unlinked node if found, or `None` if missing.
     #[inline]
-    pub fn delete<Q>(&mut self, key: &Q) -> Option<NonNull<T>>
-    where
-        Q: Ord + ?Sized,
-        T::Key: Borrow<Q>,
-    {
-        let mut z: NonNull<T> = self.nil;
-
-        let mut current: NonNull<T> = self.root;
-
-        while current != self.nil {
-            let ord = key.cmp(T::get_key(current).borrow());
-
-            if ord == Ordering::Equal {
-                z = current;
-                break;
-            }
-            let dir = (ord == Ordering::Greater) as usize;
-            current = T::get_child(current, dir);
-        }
-
+    pub fn delete_node(&mut self, z: NonNull<T>) -> bool {
+        //
         if z == self.nil {
-            return None;
+            return false;
         }
 
         let x: NonNull<T>;
@@ -303,6 +282,24 @@ where
             }
         }
 
+        T::set_parent(z, NonNull::dangling());
+        T::set_child(z, 0, NonNull::dangling());
+        T::set_child(z, 1, NonNull::dangling());
+
+        true
+    }
+
+    /// Removes a node with the specified key from the tree.
+    ///
+    /// Returns `Some(NonNull<T>)` containing the unlinked node if found, or `None` if missing.
+    #[inline]
+    pub fn delete<Q>(&mut self, key: &Q) -> Option<NonNull<T>>
+    where
+        Q: Ord + ?Sized,
+        T::Key: Borrow<Q>,
+    {
+        let z = self.search(key)?;
+        self.delete_node(z);
         Some(z)
     }
 
@@ -336,6 +333,10 @@ where
             self.minimum = z_parent;
             self.delete_fix(z_right);
         }
+
+        T::set_parent(z, NonNull::dangling());
+        T::set_child(z, 0, NonNull::dangling());
+        T::set_child(z, 1, NonNull::dangling());
 
         Some(z)
     }
