@@ -112,6 +112,59 @@ where
         T::set_parent(x, y);
     }
 
+    /// Inserts a new node into the tree, or calls `f` with the existing node if a node
+    /// with an identical key already exists.
+    #[inline]
+    pub fn insert_or<F>(&mut self, node: NonNull<T>, f: F)
+    where
+        F: FnOnce(NonNull<T>),
+    {
+        let mut node_y: NonNull<T> = self.nil;
+        let mut node_x = self.root;
+
+        // Traverse down to find insertion point or existing duplicate
+        while node_x != self.nil {
+            node_y = node_x;
+
+            let ord = T::get_key(node).cmp(T::get_key(node_x));
+            if ord == Ordering::Equal {
+                // Key already exists -> invoke closure with existing node pointer
+                f(node_x);
+                return;
+            }
+
+            let dir = (ord == Ordering::Greater) as usize;
+            node_x = T::get_child(node_x, dir);
+        }
+
+        T::set_parent(node, node_y);
+
+        // Initialize node as a red leaf connected to nil sentinel
+        T::set_color(node, Color::RED);
+        T::set_child(node, 0, self.nil);
+        T::set_child(node, 1, self.nil);
+
+        // Handle root insertion
+        if node_y == self.nil {
+            self.root = node;
+            self.minimum = node;
+            T::set_color(node, Color::BLACK);
+            return;
+        }
+
+        // Maintain the cached minimum pointer
+        if T::get_key(node) < T::get_key(self.minimum) {
+            self.minimum = node;
+        }
+
+        // Attach node to parent
+        let dir = (T::get_key(node) > T::get_key(node_y)) as usize;
+        T::set_child(node_y, dir, node);
+
+        // Rebalance to restore Red-Black invariants
+        self.fix_insert(node);
+    }
+
     /// Inserts a new node into the Red-Black Tree.
     ///
     /// Returns `true` if inserted successfully, or `false` if a node with an identical key already exists.

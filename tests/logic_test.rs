@@ -732,3 +732,73 @@ fn fuzz_delete_node_random_pointers() {
         }
     });
 }
+
+#[test]
+fn test_insert_or_basic() {
+    let sentinel = MyNode::create_sentinel();
+    let mut tree = RBTree::new(sentinel);
+
+    let node1 = MyNode::new(10, sentinel);
+    let node2 = MyNode::new(10, sentinel); // Duplicate key
+
+    // First insert should succeed
+    tree.insert_or(node1, |_| panic!("Should not trigger on new key"));
+    assert_eq!(check_tree_invariants(&tree), 1);
+
+    // Second insert with same key should trigger closure with existing node pointer
+    let mut closure_called = false;
+    tree.insert_or(node2, |existing_node| {
+        closure_called = true;
+        assert_eq!(existing_node, node1);
+        assert_eq!(*MyNode::get_key(existing_node), 10);
+    });
+
+    assert!(closure_called);
+    assert_eq!(check_tree_invariants(&tree), 1);
+
+    // Clean up
+    unsafe {
+        MyNode::free(node1);
+        MyNode::free(node2);
+        MyNode::free(sentinel);
+    }
+}
+
+#[test]
+fn fuzz_insert_or_workload() {
+    check!().with_type::<Vec<i32>>().for_each(|keys| {
+        let sentinel = MyNode::create_sentinel();
+        let mut tree = RBTree::new(sentinel);
+        let mut inserted_nodes = HashMap::new();
+
+        for &key in keys {
+            let candidate = MyNode::new(key, sentinel);
+
+            tree.insert_or(candidate, |existing| {
+                // Key exists: verify match and free the uninserted candidate node
+                assert_eq!(*MyNode::get_key(existing), key);
+                unsafe {
+                    MyNode::free(candidate);
+                }
+            });
+
+            if !inserted_nodes.contains_key(&key) {
+                inserted_nodes.insert(key, candidate);
+            }
+
+            check_tree_invariants(&tree);
+        }
+
+        assert_eq!(check_tree_invariants(&tree), inserted_nodes.len());
+
+        // Safe cleanup
+        for (_, ptr) in inserted_nodes {
+            unsafe {
+                MyNode::free(ptr);
+            }
+        }
+        unsafe {
+            MyNode::free(sentinel);
+        }
+    });
+}
